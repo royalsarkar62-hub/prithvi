@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRITHVI - Plant Identifier</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #e8f5e9, #f5fff6);
+      color: #173b22;
+    }
+    .container {
+      width: min(900px, 94%);
+      margin: 30px auto;
+    }
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 34px; }
+    h2 { margin-top: 0; }
+    .sub { color: #55705c; margin-bottom: 22px; }
+    label { display: block; font-weight: 700; margin: 12px 0 7px; }
+    input[type="password"], input[type="text"], select {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #c8d8cc;
+      border-radius: 10px;
+      font-size: 15px;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px dashed #9fbea5;
+      border-radius: 12px;
+      background: #f7fbf8;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 13px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #287a3d;
+      color: white;
+      margin-top: 12px;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .secondary { background: #52715a; }
+    .danger { background: #b33a3a; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .preview {
+      display: none;
+      width: 100%;
+      max-height: 420px;
+      object-fit: contain;
+      margin-top: 16px;
+      border-radius: 14px;
+      background: #f1f5f2;
+    }
+    .status {
+      display: none;
+      padding: 13px;
+      border-radius: 10px;
+      margin-top: 15px;
+      white-space: pre-wrap;
+    }
+    .status.info { display: block; background: #eef6ff; color: #24547a; }
+    .status.success { display: block; background: #edf8ef; color: #236332; }
+    .status.error { display: block; background: #fff0f0; color: #8b2525; }
+    .result {
+      display: none;
+      margin-top: 20px;
+    }
+    .match {
+      padding: 14px;
+      border: 1px solid #d9e6db;
+      border-radius: 12px;
+      margin: 10px 0;
+      background: #fbfdfb;
+    }
+    .match strong { font-size: 17px; }
+    .score { color: #287a3d; font-weight: 700; float: right; }
+    small { color: #68776c; }
+    .hint {
+      font-size: 13px;
+      color: #64756a;
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+
+    <div class="card">
+      <h1>🌿 PRITHVI</h1>
+      <div class="sub">Plant Identification using Pl@ntNet</div>
+
+      <h2>1. API Key</h2>
+      <label for="apiKey">Pl@ntNet API Key</label>
+      <input id="apiKey" type="password" placeholder="Paste your new API key here">
+
+      <div class="row">
+        <button id="saveKey">Save API Key</button>
+        <button id="clearKey" class="danger">Clear Saved Key</button>
+      </div>
+
+      <div class="hint">
+        Your API key is saved only in this browser's localStorage. Do not share the key publicly.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Select a Plant Image</h2>
+
+      <input id="imageInput" type="file" accept="image/jpeg,image/png">
+
+      <img id="preview" class="preview" alt="Selected plant preview">
+
+      <label for="organ">Plant part (optional)</label>
+      <select id="organ">
+        <option value="auto">Auto detect</option>
+        <option value="leaf">Leaf</option>
+        <option value="flower">Flower</option>
+        <option value="fruit">Fruit</option>
+        <option value="bark">Bark</option>
+      </select>
+
+      <button id="identifyBtn" disabled>🔍 Identify Plant</button>
+
+      <div id="status" class="status"></div>
+      <div id="result" class="result"></div>
+    </div>
+
+  </div>
+
+<script>
+  const API_URL = "https://my-api.plantnet.org/v2/identify/all";
+  const STORAGE_KEY = "prithvi_plantnet_key";
+
+  const apiKeyInput = document.getElementById("apiKey");
+  const saveKeyBtn = document.getElementById("saveKey");
+  const clearKeyBtn = document.getElementById("clearKey");
+  const imageInput = document.getElementById("imageInput");
+  const preview = document.getElementById("preview");
+  const organSelect = document.getElementById("organ");
+  const identifyBtn = document.getElementById("identifyBtn");
+  const statusBox = document.getElementById("status");
+  const resultBox = document.getElementById("result");
+
+  let selectedFile = null;
+
+  function getSavedKey() {
+    return localStorage.getItem(STORAGE_KEY) || "";
+  }
+
+  function showStatus(message, type = "info") {
+    statusBox.textContent = message;
+    statusBox.className = "status " + type;
+  }
+
+  function updateButton() {
+    identifyBtn.disabled = !(selectedFile && apiKeyInput.value.trim());
+  }
+
+  const savedKey = getSavedKey();
+  if (savedKey) {
+    apiKeyInput.value = savedKey;
+  }
+
+  saveKeyBtn.addEventListener("click", () => {
+    const key = apiKeyInput.value.trim();
+
+    if (!key) {
+      showStatus("Please enter your Pl@ntNet API key.", "error");
+      return;
+    }
+
+    localStorage.setItem(STORAGE_KEY, key);
+    showStatus("API key saved successfully in this browser.", "success");
+    updateButton();
+  });
+
+  clearKeyBtn.addEventListener("click", () => {
+    localStorage.removeItem(STORAGE_KEY);
+    apiKeyInput.value = "";
+    showStatus("Saved API key cleared.", "success");
+    updateButton();
+  });
+
+  apiKeyInput.addEventListener("input", updateButton);
+
+  imageInput.addEventListener("change", () => {
+    selectedFile = imageInput.files[0] || null;
+    resultBox.style.display = "none";
+
+    if (!selectedFile) {
+      preview.style.display = "none";
+      preview.removeAttribute("src");
+      updateButton();
+      return;
+    }
+
+    if (!["image/jpeg", "image/png"].includes(selectedFile.type)) {
+      selectedFile = null;
+      imageInput.value = "";
+      preview.style.display = "none";
+      showStatus("Please select a JPG or PNG image.", "error");
+      updateButton();
+      return;
+    }
+
+    preview.src = URL.createObjectURL(selectedFile);
+    preview.style.display = "block";
+    showStatus("Image selected. Ready to identify.", "success");
+    updateButton();
+  });
+
+  identifyBtn.addEventListener("click", identifyPlant);
+
+  async function identifyPlant() {
+    const apiKey = apiKeyInput.value.trim();
+
+    if (!apiKey) {
+      showStatus("Please enter your API key first.", "error");
+      return;
+    }
+
+    if (!selectedFile) {
+      showStatus("Please select a plant image first.", "error");
+      return;
+    }
+
+    localStorage.setItem(STORAGE_KEY, apiKey);
+
+    identifyBtn.disabled = true;
+    resultBox.style.display = "none";
+    showStatus("Identifying plant... Please wait.", "info");
+
+    try {
+      const formData = new FormData();
+      formData.append("images", selectedFile);
+      formData.append("organs", organSelect.value);
+
+      const url =
+        API_URL +
+        "?api-key=" + encodeURIComponent(apiKey) +
+        "&lang=en" +
+        "&nb-results=5";
+
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = {};
+      }
+
+      if (!response.ok) {
+        let message = data.message || data.error || "";
+
+        if (response.status === 401 || response.status === 403) {
+          message =
+            "API key rejected (401/403).\n\n" +
+            "Check these Pl@ntNet settings:\n" +
+            "1. Generate/use a valid API key.\n" +
+            "2. Enable 'Expose my API key'.\n" +
+            "3. Authorized domain must be exactly:\n" +
+            "   royalsarkar62-hub.github.io\n" +
+            "4. Open the site using HTTPS, not file://.\n\n" +
+            (message ? "Server message: " + message : "");
+        }
+
+        throw new Error(
+          "HTTP " + response.status + (message ? "\n" + message : "")
+        );
+      }
+
+      displayResults(data);
+      showStatus("Plant identification completed.", "success");
+
+    } catch (error) {
+      console.error(error);
+      showStatus(
+        "Identification failed.\n\n" +
+        error.message +
+        "\n\nIf this is a CORS error, check the Authorized Domains setting in your Pl@ntNet API account.",
+        "error"
+      );
+    } finally {
+      identifyBtn.disabled = false;
+      updateButton();
+    }
+  }
+
+  function displayResults(data) {
+    const results = Array.isArray(data.results) ? data.results : [];
+
+    resultBox.innerHTML = "";
+
+    if (data.bestMatch) {
+      const title = document.createElement("h2");
+      title.textContent = "Best Match";
+      resultBox.appendChild(title);
+
+      const best = document.createElement("div");
+      best.className = "match";
+      best.innerHTML = "<strong>" + escapeHtml(data.bestMatch) + "</strong>";
+      resultBox.appendChild(best);
+    }
+
+    if (results.length) {
+      const heading = document.createElement("h2");
+      heading.textContent = "Possible Matches";
+      resultBox.appendChild(heading);
+
+      results.forEach((item) => {
+        const species = item.species || {};
+        const name =
+          species.scientificNameWithoutAuthor ||
+          species.scientificName ||
+          "Unknown species";
+
+        const score =
+          typeof item.score === "number"
+            ? (item.score * 100).toFixed(1) + "%"
+            : "N/A";
+
+        const commonNames = Array.isArray(species.commonNames)
+          ? species.commonNames.slice(0, 3).join(", ")
+          : "";
+
+        const div = document.createElement("div");
+        div.className = "match";
+        div.innerHTML =
+          "<span class='score'>" + escapeHtml(score) + "</span>" +
+          "<strong>" + escapeHtml(name) + "</strong>" +
+          (commonNames ? "<br><small>" + escapeHtml(commonNames) + "</small>" : "");
+
+        resultBox.appendChild(div);
+      });
+    }
+
+    if (!results.length && !data.bestMatch) {
+      resultBox.innerHTML =
+        "<div class='match'>No plant identification result was returned. Try a clearer image.</div>";
+    }
+
+    resultBox.style.display = "block";
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  updateButton();
+</script>
+</body>
+</html>
